@@ -19,7 +19,7 @@ spec:
         - name: ecr-secret
       containers:
         - name: backend
-          image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/awstodo-backend:latest
+          image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/todosk8s-backend:DEPLOY_TAG
           ports:
             - containerPort: 3000
           envFrom:

@@ -1,13 +1,13 @@
-# AWStodo K8s Local — Hướng dẫn Deploy
+# TodosK8S K8s Local — Hướng dẫn Deploy
 
 ## Tổng quan luồng
 
 ```
 push to main
   │
-  ├── ci     (ubuntu-latest) — validate structure + npm ci
-  ├── build  (ubuntu-latest) — docker build + push → ECR
-  └── deploy (self-hosted — Windows host)
+  ├── ci     (self-hosted) — validate structure + npm ci
+  ├── build  (self-hosted) — docker build + push → ECR
+  └── deploy (self-hosted — WSL2 Ubuntu)
               │
               ├── rsync k8s/ → master VM
               ├── ansible site.yml  ← Bootstrap (idempotent)
@@ -68,7 +68,7 @@ kubectl wait --namespace ingress-nginx \
 
 ```bash
 # Từ Windows host hoặc bất kỳ máy nào có Terraform + AWS CLI
-cd terraform/bootstrap && terraform init && terraform apply
+cd terraform/backend-bucket && terraform init && terraform apply
 cd terraform/environments/dev && terraform init && terraform apply
 
 # Lấy outputs cần thiết
@@ -79,21 +79,36 @@ terraform output s3_bucket_name
 
 ### 4. Điền credentials vào k8s/todoapp/secret.yaml
 
+Lấy outputs từ Terraform sau khi apply:
+
+```bash
+cd terraform/environments/dev
+terraform output -raw rds_endpoint          # → DB_HOST (bỏ phần :5432 ở cuối)
+terraform output redis_endpoint             # → REDIS_HOST
+terraform output s3_bucket_name             # → AWS_S3_BUCKET
+terraform output -raw backend_s3_access_key_id      # → AWS_ACCESS_KEY_ID
+terraform output -raw backend_s3_secret_access_key  # → AWS_SECRET_ACCESS_KEY
+```
+
 Mở [k8s/todoapp/secret.yaml](k8s/todoapp/secret.yaml), thay các `REPLACE_WITH_*`:
 
 ```yaml
-DB_HOST:           "<rds-endpoint>"
-DB_USER:           "postgres"
-DB_PASS:           "<db_password>"
-DB_NAME:           "postgres"
-DB_SSL:            "true"
-REDIS_HOST:        "<elasticache-endpoint>"
-JWT_ACCESS_SECRET: "<random string>"
-JWT_REFRESH_SECRET: "<random string>"
-AWS_S3_BUCKET:     "<s3_bucket_name>"
+DB_HOST:                "<rds-endpoint>"        # từ terraform output rds_endpoint (bỏ :5432)
+DB_USER:                "postgres"
+DB_PASS:                "<db_password>"          # giá trị trong terraform.tfvars
+DB_NAME:                "postgres"
+DB_PORT:                "5432"
+DB_SSL:                 "true"
+REDIS_HOST:             "<elasticache-endpoint>" # từ terraform output redis_endpoint
+JWT_ACCESS_SECRET:      "<random string>"
+JWT_REFRESH_SECRET:     "<random string>"
+AWS_REGION:             "ap-southeast-2"
+AWS_S3_BUCKET:          "<s3_bucket_name>"       # từ terraform output s3_bucket_name
+AWS_ACCESS_KEY_ID:      "<access_key_id>"        # từ terraform output backend_s3_access_key_id
+AWS_SECRET_ACCESS_KEY:  "<secret_access_key>"    # từ terraform output backend_s3_secret_access_key
 ```
 
-> File này đã có trong `.gitignore` sau khi điền — không commit giá trị thật lên git.
+> File này đã có trong `.gitignore` — không commit giá trị thật lên git.
 
 ### 5. Cài self-hosted runner trong WSL2
 
@@ -153,7 +168,7 @@ curl -o actions-runner-linux-x64.tar.gz -L \
 tar xzf actions-runner-linux-x64.tar.gz
 
 # Config với token từ GitHub UI (hết hạn sau 1 tiếng)
-./config.sh --url https://github.com/PhongHai191/AWStodo --token <TOKEN>
+./config.sh --url https://github.com/PhongHai191/TodosK8S --token <TOKEN>
 
 # Chạy như service (tự start khi Windows boot)
 sudo ./svc.sh install
@@ -182,7 +197,7 @@ aws iam create-open-id-connect-provider \
   --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
 
 # Verify IAM role do Terraform tạo
-aws iam get-role --role-name awstodo-dev-github-actions-role
+aws iam get-role --role-name todosk8s-dev-github-actions-role
 ```
 
 ---
@@ -235,8 +250,10 @@ kubectl scale deployment frontend --replicas=3 -n todoapp
 ECR token hết hạn sau 12h. Pipeline tự refresh khi deploy. Nếu cần refresh thủ công:
 
 ```bash
-# Từ Windows host (Git Bash)
-./k8s/scripts/ecr-secret.sh ap-southeast-2 529646246979 192.168.241.10 ~/.ssh/k8s_master
+# Từ WSL2 terminal
+cd ansible
+AWS_ACCOUNT_ID=529646246979 AWS_REGION=ap-southeast-2 \
+  ansible-playbook -i inventories/dev playbooks/site.yml
 ```
 
 ### Init DB lại (nếu reset RDS)

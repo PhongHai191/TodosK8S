@@ -34,28 +34,6 @@ resource "aws_iam_role" "github_actions" {
   tags = { Name = "${var.project_name}-${var.environment}-github-actions-role" }
 }
 
-# S3 deploy access for GitHub Actions
-resource "aws_iam_role_policy" "gha_s3" {
-  name = "${var.project_name}-${var.environment}-gha-s3"
-  role = aws_iam_role.github_actions.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid      = "S3DeployAccess"
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:DeleteObject"]
-        Resource = [
-          var.s3_bucket_arn,
-          "${var.s3_bucket_arn}/deploy/*",
-          "${var.s3_bucket_arn}/ansible-tmp/*",
-          "${var.s3_bucket_arn}/i-*"
-        ]
-      }
-    ]
-  })
-}
 
 # ECR push access for GitHub Actions
 resource "aws_iam_role_policy" "gha_ecr" {

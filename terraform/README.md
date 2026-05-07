@@ -1,4 +1,4 @@
-# AWStodo – Terraform Infrastructure
+# TodosK8S – Terraform Infrastructure
 
 Highly available web application infrastructure on AWS, managed with Terraform.
 
@@ -109,7 +109,7 @@ terraform output github_actions_role_arn
 - IMDSv2 is enforced on all EC2 instances
 - S3 bucket has public access **fully blocked**
 - RDS and ElastiCache are in **private subnets only**
-- GitHub OIDC is scoped to `main` branch of `PhongHai191/AWStodo` only
+- GitHub OIDC is scoped to `main` branch of `PhongHai191/TodosK8S` only
 - WAF protects ALB with rate limiting, SQLi, and common rule sets
 
 ## Useful Commands

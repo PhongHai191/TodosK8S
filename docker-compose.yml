@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   backend:
-    image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/awstodo-backend:${TAG}
+    image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/todosk8s-backend:${TAG}
     restart: always
     ports:
       - "3000:3000"
@@ -25,7 +25,7 @@ services:
         awslogs-create-group: "true"
 
   nginx:
-    image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/awstodo-nginx:${TAG}
+    image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/todosk8s-nginx:${TAG}
     container_name: nginx
     restart: always
     ports:

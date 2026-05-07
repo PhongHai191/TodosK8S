@@ -53,7 +53,7 @@ spec:
         - name: ecr-secret
       containers:
         - name: frontend
-          image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/awstodo-nginx:latest
+          image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/todosk8s-nginx:DEPLOY_TAG
           ports:
             - containerPort: 80
           volumeMounts:

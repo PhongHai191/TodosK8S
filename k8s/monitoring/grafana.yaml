@@ -45,7 +45,7 @@ spec:
             - name: GF_SECURITY_ADMIN_PASSWORD
               value: "admin123"
             - name: GF_SERVER_ROOT_URL
-              value: "http://192.168.241.10:30000"
+              value: "http://192.168.241.12:30000"
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources

@@ -1,7 +1,7 @@
 # ── DB Subnet Group ───────────────────────────────────────────────────────────
 resource "aws_db_subnet_group" "main" {
   name       = "${var.project_name}-${var.environment}-db-subnet-group"
-  subnet_ids = var.private_db_subnet_ids
+  subnet_ids = var.public_subnet_ids
 
   tags = { Name = "${var.project_name}-${var.environment}-db-subnet-group" }
 }
@@ -56,25 +56,4 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot       = true
 
   tags = { Name = "${var.project_name}-${var.environment}-db" }
-}
-
-# ── DB Connection Secret (Secrets Manager) ────────────────────────────────────
-resource "aws_secretsmanager_secret" "db_credentials" {
-  name                    = "${var.project_name}/${var.environment}/db/credentials"
-  description             = "Database connection info for ${var.project_name} ${var.environment}"
-  recovery_window_in_days = 0
-
-  tags = { Name = "${var.project_name}-${var.environment}-db-credentials" }
-}
-
-resource "aws_secretsmanager_secret_version" "db_credentials" {
-  secret_id = aws_secretsmanager_secret.db_credentials.id
-
-  secret_string = jsonencode({
-    host     = aws_db_instance.main.address
-    port     = aws_db_instance.main.port
-    dbname   = aws_db_instance.main.db_name
-    username = aws_db_instance.main.username
-    password = var.db_password
-  })
 }

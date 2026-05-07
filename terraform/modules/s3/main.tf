@@ -64,15 +64,9 @@ resource "aws_s3_bucket_cors_configuration" "main" {
   }
 }
 
-# ── Pre-create /avatars and /deploy "folders" via placeholder objects ──────────
+# ── Pre-create avatars/ folder ────────────────────────────────────────────────
 resource "aws_s3_object" "avatars_folder" {
   bucket  = aws_s3_bucket.main.id
   key     = "avatars/"
-  content = ""
-}
-
-resource "aws_s3_object" "deploy_folder" {
-  bucket  = aws_s3_bucket.main.id
-  key     = "deploy/"
   content = ""
 }

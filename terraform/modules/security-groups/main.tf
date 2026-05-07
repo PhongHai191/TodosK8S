@@ -24,6 +24,16 @@ resource "aws_security_group_rule" "redis_ingress_trusted" {
   cidr_blocks       = [var.trusted_ip]
 }
 
+resource "aws_security_group_rule" "redis_egress_all" {
+  type              = "egress"
+  description       = "Allow all outbound"
+  security_group_id = aws_security_group.redis.id
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+}
+
 # ── RDS Rules ─────────────────────────────────────────────────────────────────
 resource "aws_security_group_rule" "rds_ingress_trusted" {
   type              = "ingress"
@@ -33,4 +43,14 @@ resource "aws_security_group_rule" "rds_ingress_trusted" {
   to_port           = 5432
   protocol          = "tcp"
   cidr_blocks       = [var.trusted_ip]
+}
+
+resource "aws_security_group_rule" "rds_egress_all" {
+  type              = "egress"
+  description       = "Allow all outbound"
+  security_group_id = aws_security_group.rds.id
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
 }

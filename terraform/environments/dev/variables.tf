@@ -4,7 +4,7 @@ variable "aws_region"   {
 }
 variable "project_name" { 
     type = string 
-    default = "awstodo" 
+    default = "todosk8s" 
 }
 variable "environment"  { 
     type = string 
@@ -14,10 +14,15 @@ variable "environment"  {
 variable "vpc_cidr"            { type = string }
 variable "availability_zones"  { type = list(string) }
 variable "public_subnet_cidrs" { type = list(string) }
-variable "private_app_cidrs"   { type = list(string) }
-variable "private_db_cidrs"    { type = list(string) }
 
-variable "trusted_ip"    { type = string }
+variable "trusted_ip" {
+  type        = string
+  description = "Trusted CIDR for RDS/Redis ingress, e.g. 1.2.3.4/32"
+  validation {
+    condition     = can(cidrhost(var.trusted_ip, 0))
+    error_message = "trusted_ip must be a valid CIDR block, e.g. 1.2.3.4/32"
+  }
+}
 
 variable "db_username"       { 
     type = string 
@@ -33,11 +38,3 @@ variable "db_instance_class" { type = string }
 variable "s3_bucket_name" { type = string }
 variable "github_repo"    { type = string }
 
-variable "jwt_access_secret" {
-  type      = string
-  sensitive = true
-}
-variable "jwt_refresh_secret" {
-  type      = string
-  sensitive = true
-}

@@ -10,7 +10,6 @@
 
   vars:
     aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-2', true) }}"
-    db_secret_name: "awstodo/dev/db/credentials"
 
   tasks:
     - name: Init database schema

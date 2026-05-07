@@ -1,10 +1,26 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment & secrets
 .env
-.pem
-.md
-.sh
-.ps1
+*.pem
 *.tfvars
 *.tfvars.json
-.md
 
+# K8s secrets (chứa credentials thật)
+k8s/todoapp/secret.yaml
+
+# Scripts
+*.sh
+*.ps1
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+errored.tfstate
+.terraform.lock.hcl
+
+# Ansible
+ansible/*.retry
+ansible/**/*.retry

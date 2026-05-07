@@ -31,11 +31,25 @@
   changed_when: false
   failed_when: false
 
-# ── First deploy: kubectl apply (tạo mới) ─────────────────────────────────────
+# ── First deploy: patch DEPLOY_TAG trong file rồi apply ───────────────────────
+- name: Patch backend image tag in manifest
+  replace:
+    path: "{{ k8s_manifests_dir }}/todoapp/backend.yaml"
+    regexp: 'DEPLOY_TAG'
+    replace: "{{ image_tag }}"
+  when: backend_exists.rc != 0
+
 - name: Apply backend manifest (first deploy)
   command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/backend.yaml
   when: backend_exists.rc != 0
   changed_when: true
+
+- name: Patch frontend image tag in manifest
+  replace:
+    path: "{{ k8s_manifests_dir }}/todoapp/frontend.yaml"
+    regexp: 'DEPLOY_TAG'
+    replace: "{{ image_tag }}"
+  when: frontend_exists.rc != 0
 
 - name: Apply frontend manifest (first deploy)
   command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/frontend.yaml
@@ -69,7 +83,7 @@
 - name: Rolling update backend image
   command: >
     kubectl set image deployment/backend
-    backend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/awstodo-backend:{{ image_tag }}
+    backend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/todosk8s-backend:{{ image_tag }}
     -n {{ namespace }}
   when: backend_exists.rc == 0
   changed_when: true
@@ -77,7 +91,7 @@
 - name: Rolling update frontend image
   command: >
     kubectl set image deployment/frontend
-    frontend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/awstodo-nginx:{{ image_tag }}
+    frontend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/todosk8s-nginx:{{ image_tag }}
     -n {{ namespace }}
   when: frontend_exists.rc == 0
   changed_when: true
@@ -114,7 +128,7 @@
 - name: Rollback backend on failure
   command: >
     kubectl set image deployment/backend
-    backend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/awstodo-backend:{{ prev_backend_tag }}
+    backend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/todosk8s-backend:{{ prev_backend_tag }}
     -n {{ namespace }}
   when: health is failed and backend_exists.rc == 0
   changed_when: true
@@ -122,7 +136,7 @@
 - name: Rollback frontend on failure
   command: >
     kubectl set image deployment/frontend
-    frontend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/awstodo-nginx:{{ prev_frontend_tag }}
+    frontend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/todosk8s-nginx:{{ prev_frontend_tag }}
     -n {{ namespace }}
   when: health is failed and frontend_exists.rc == 0
   changed_when: true

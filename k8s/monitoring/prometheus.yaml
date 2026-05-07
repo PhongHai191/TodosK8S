@@ -28,6 +28,9 @@ data:
             regex: node-exporter
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
+          - source_labels: [__meta_kubernetes_pod_host_ip]
+            target_label: __address__
+            replacement: $1:9100
 
       - job_name: 'kube-state-metrics'
         static_configs:
@@ -120,12 +123,12 @@ metadata:
   name: prometheus
 rules:
   - apiGroups: [""]
-    resources: [nodes, nodes/proxy, services, endpoints, pods]
+    resources: [nodes, nodes/proxy, nodes/metrics, services, endpoints, pods]
     verbs: [get, list, watch]
-  - apiGroups: [extensions]
+  - apiGroups: [networking.k8s.io]
     resources: [ingresses]
     verbs: [get, list, watch]
-  - nonResourceURLs: [/metrics]
+  - nonResourceURLs: [/metrics, /metrics/cadvisor]
     verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

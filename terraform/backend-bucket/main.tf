@@ -14,10 +14,10 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "awstodo-terraform-state-529646246979"
+  bucket = "todosk8s-terraform-state-529646246979"
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
   }
 }
 
