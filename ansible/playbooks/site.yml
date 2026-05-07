@@ -11,7 +11,7 @@
     aws_region:     "{{ lookup('env', 'AWS_REGION')     | default('ap-southeast-2', true) }}"
     aws_account_id: "{{ lookup('env', 'AWS_ACCOUNT_ID') }}"
     namespace: todoapp
-    k8s_manifests_dir: /home/ubuntu/k8s
+    k8s_manifests_dir: /home/yance/k8s
 
   tasks:
     # ── Preflight ──────────────────────────────────────────────────────────────
