@@ -100,7 +100,7 @@ jobs:
       # để site.yml luôn apply phiên bản mới nhất từ repo
       - name: Sync k8s manifests to master
         run: |
-          rsync -az --delete \
+          rsync -az --delete --exclude='todoapp/secret.yaml' \
             -e "ssh -i $HOME/.ssh/k8s_master -o StrictHostKeyChecking=no" \
             k8s/ yance@192.168.241.10:/home/yance/k8s/
 
