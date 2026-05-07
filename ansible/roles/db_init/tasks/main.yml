@@ -1,0 +1,88 @@
+---
+- name: Install PostgreSQL client
+  ansible.builtin.apt:
+    name: postgresql-client
+    state: present
+    update_cache: true
+  become: true
+
+- name: Fetch DB credentials from K8s Secret
+  command: >
+    kubectl get secret todoapp-secret -n todoapp
+    -o jsonpath='{.data.{{ item.key }}}'
+  loop:
+    - { key: DB_HOST,  var: db_host }
+    - { key: DB_USER,  var: db_user }
+    - { key: DB_PASS,  var: db_pass }
+    - { key: DB_NAME,  var: db_name }
+    - { key: DB_PORT,  var: db_port }
+  register: secret_values
+  changed_when: false
+  no_log: true
+
+- name: Decode secret values
+  set_fact:
+    db_host: "{{ (secret_values.results | selectattr('item.var', 'eq', 'db_host') | first).stdout | b64decode }}"
+    db_user: "{{ (secret_values.results | selectattr('item.var', 'eq', 'db_user') | first).stdout | b64decode }}"
+    db_pass: "{{ (secret_values.results | selectattr('item.var', 'eq', 'db_pass') | first).stdout | b64decode }}"
+    db_name: "{{ (secret_values.results | selectattr('item.var', 'eq', 'db_name') | first).stdout | b64decode }}"
+    db_port: "{{ (secret_values.results | selectattr('item.var', 'eq', 'db_port') | first).stdout | b64decode }}"
+  no_log: true
+
+- name: Debug - DB connection info
+  debug:
+    msg:
+      - "host : {{ db_host }}"
+      - "user : {{ db_user }}"
+      - "db   : {{ db_name }}"
+      - "port : {{ db_port }}"
+
+- name: Copy init.sql to master
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../database/init.sql"
+    dest: /tmp/db_init.sql
+    mode: "0600"
+
+- name: Wait for RDS to be ready
+  ansible.builtin.shell:
+    cmd: "psql -h '{{ db_host }}' -U '{{ db_user }}' -d '{{ db_name }}' -p '{{ db_port }}' -c 'SELECT 1'"
+  environment:
+    PGPASSWORD: "{{ db_pass }}"
+  register: rds_ping
+  until: rds_ping.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  no_log: true
+
+- name: Run init.sql
+  ansible.builtin.shell:
+    cmd: "psql -h '{{ db_host }}' -U '{{ db_user }}' -d '{{ db_name }}' -p '{{ db_port }}' --set ON_ERROR_STOP=1 -f /tmp/db_init.sql"
+  environment:
+    PGPASSWORD: "{{ db_pass }}"
+  register: init_result
+  failed_when: init_result.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Show init.sql output
+  debug:
+    msg: "{{ init_result.stdout_lines }}"
+
+- name: Verify tables created
+  ansible.builtin.shell:
+    cmd: "psql -h '{{ db_host }}' -U '{{ db_user }}' -d '{{ db_name }}' -p '{{ db_port }}' -c \"SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;\""
+  environment:
+    PGPASSWORD: "{{ db_pass }}"
+  register: tables_result
+  changed_when: false
+  no_log: true
+
+- name: Show public tables
+  debug:
+    msg: "{{ tables_result.stdout_lines }}"
+
+- name: Remove init.sql from master
+  ansible.builtin.file:
+    path: /tmp/db_init.sql
+    state: absent

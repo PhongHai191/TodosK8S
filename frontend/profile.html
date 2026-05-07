@@ -1,0 +1,160 @@
+<link rel="stylesheet" href="/css/style.css">
+
+<div class="navbar">
+  <div>Todo App</div>
+  <div>
+    <a href="/app.html">Back</a>
+    <button onclick="logout()">Logout</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- CARD PROFILE -->
+  <div class="profile-card">
+
+    <!-- TOP: avatar + username -->
+    <div class="profile-header">
+      <img id="avatar" class="avatar-lg" src="/default-avatar.png">
+      <div class="profile-name" id="username">Username</div>
+    </div>
+
+    <!-- UPLOAD -->
+    <div class="upload-box">
+      <input type="file" id="file">
+      <button onclick="upload()">Upload Avatar</button>
+    </div>
+
+    <!-- INFO -->
+    <div class="profile-info" id="info"></div>
+
+  </div>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  if (!localStorage.accessToken) {
+    window.location.href = "/";
+  }
+
+  // FETCH WITH AUTH
+  async function fetchWithAuth(url, options = {}) {
+    let res = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: "Bearer " + localStorage.accessToken
+      }
+    });
+
+    if (res.status === 403) {
+      const refresh = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          refreshToken: localStorage.refreshToken
+        })
+      });
+
+      const data = await refresh.json();
+
+      if (!data.accessToken) {
+        logout();
+        return;
+      }
+
+      localStorage.accessToken = data.accessToken;
+
+      return fetchWithAuth(url, options);
+    }
+
+    return res;
+  }
+
+  // LOAD PROFILE
+async function load() {
+  const res = await fetchWithAuth("/api/profile");
+  if (!res) return;
+
+  const data = await res.json();
+
+  const avatar = document.getElementById("avatar");
+  const info = document.getElementById("info");
+  const username = document.getElementById("username");
+
+  if (avatar) {
+  avatar.src = data.avatar || "/default-avatar.png";
+}
+
+  if (username) {
+    username.innerText = data.username || "User";
+  }
+
+  if (info) {
+    info.innerHTML = `
+      <p><b>Email:</b> ${data.email || "-"}</p>
+      <p><b>Fullname:</b> ${data.fullname || "-"}</p>
+      <p><b>Phone:</b> ${data.phone || "-"}</p>
+    `;
+  }
+}
+
+  // UPLOAD AVATAR
+  async function upload() {
+  const file = document.getElementById("file").files[0];
+  if (!file) return alert("Choose file");
+
+  // 1. lấy presigned URL
+  const res = await fetchWithAuth(
+    `/api/profile/upload-url?filename=${file.name}&type=${file.type}`
+  );
+
+  const { uploadUrl, key } = await res.json(); // ✅ sửa ở đây
+
+  // 2. upload lên S3
+  await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type
+    },
+    body: file
+  });
+
+  // 3. lưu KEY (không phải URL)
+  await fetchWithAuth("/api/profile/avatar", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ key }) // ✅ sửa ở đây
+  });
+
+  // 4. reload lại profile từ server
+  await load(); // ✅ QUAN TRỌNG
+}
+
+  // LOGOUT
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          refreshToken: localStorage.refreshToken
+        })
+      });
+    } catch {}
+
+    localStorage.clear();
+    window.location.href = "/";
+  }
+
+  // expose để onclick dùng
+  window.upload = upload;
+  window.logout = logout;
+
+  load();
+});
+</script>

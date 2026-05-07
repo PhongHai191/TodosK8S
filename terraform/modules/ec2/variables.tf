@@ -1,0 +1,12 @@
+variable "project_name"              { type = string }
+variable "environment"               { type = string }
+variable "ami_id"                    { type = string }
+variable "instance_type"             { type = string }
+variable "kms_key_arn"               { type = string }
+variable "private_app_subnet_ids"    { type = list(string) }
+variable "public_subnet_ids"         { type = list(string) }
+variable "web_sg_id"                 { type = string }
+variable "bastion_sg_id"             { type = string }
+variable "frontend_target_group_arn" { type = string }
+variable "backend_target_group_arn"  { type = string }
+variable "ec2_instance_profile"      { type = string }

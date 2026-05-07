@@ -1,0 +1,127 @@
+<link rel="stylesheet" href="/css/style.css">
+
+<div class="navbar">
+  <div>Todo App</div>
+  <div>
+    <a href="/profile.html">Profile</a>
+    <button onclick="logout()">Logout</button>
+  </div>
+</div>
+
+<div class="container">
+  <h1>My Todos</h1>
+
+  <input id="todo" placeholder="New todo">
+  <button onclick="add()">Add</button>
+
+  <ul id="list"></ul>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  const list = document.getElementById("list");
+  const todo = document.getElementById("todo");
+
+  if (!localStorage.accessToken) {
+    window.location.href = "/";
+  }
+
+  // wrapper có auto refresh token
+  async function fetchWithAuth(url, options = {}) {
+    let res = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: "Bearer " + localStorage.accessToken
+      }
+    });
+
+    // nếu token hết hạn → refresh
+    if (res.status === 403) {
+      const refresh = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          refreshToken: localStorage.refreshToken
+        })
+      });
+
+      const data = await refresh.json();
+
+      if (!data.accessToken) {
+        logout();
+        return;
+      }
+
+      localStorage.accessToken = data.accessToken;
+
+      return fetchWithAuth(url, options);
+    }
+
+    return res;
+  }
+
+  // LOAD TODOS
+  async function load() {
+    if (!list) return console.error("list not found");
+
+    const res = await fetchWithAuth("/api/todos");
+    const data = await res.json();
+
+    list.innerHTML = data.map(t => `
+      <li>
+        ${t.text}
+        <span class="delete" onclick="del('${t.id}')">X</span>
+      </li>
+    `).join("");
+  }
+
+  // ADD TODO
+  async function add() {
+    if (!todo.value) return;
+
+    await fetchWithAuth("/api/todos", {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json"
+      },
+      body: JSON.stringify({ text: todo.value })
+    });
+
+    todo.value = "";
+    load();
+  }
+
+  // DELETE TODO
+  async function del(id) {
+    await fetchWithAuth("/api/todos/" + id, {
+      method: "DELETE"
+    });
+
+    load();
+  }
+
+  // LOGOUT
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          refreshToken: localStorage.refreshToken
+        })
+      });
+    } catch {}
+
+    localStorage.clear();
+    window.location.href = "/";
+  }
+
+  // expose ra global để onclick dùng được
+  window.add = add;
+  window.del = del;
+  window.logout = logout;
+
+  load();
+});
+</script>

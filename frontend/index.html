@@ -1,0 +1,114 @@
+<link rel="stylesheet" href="/css/style.css">
+
+<div class="container">
+  <h1 id="title">Login</h1>
+
+  <input id="user" placeholder="Username">
+  <input id="pass" type="password" placeholder="Password">
+  <input id="email" placeholder="Email" style="display:none;">
+  <input id="fullname" placeholder="Full name" style="display:none;">
+  <input id="phone" placeholder="Phone" style="display:none;">
+
+  <button id="mainBtn" onclick="login()">Login</button>
+
+  <p style="text-align:center;margin-top:10px;">
+    <a href="#" id="toggleText" onclick="toggle()">
+        Don't have an account? Signup
+    </a>
+  </p>
+</div>
+
+<script>
+const title = document.getElementById("title");
+const mainBtn = document.getElementById("mainBtn");
+const toggleText = document.getElementById("toggleText");
+const user = document.getElementById("user");
+const pass = document.getElementById("pass");
+const email = document.getElementById("email");
+const fullname = document.getElementById("fullname");
+const phone = document.getElementById("phone");
+let isLogin = true;
+
+function toggle() {
+  isLogin = !isLogin;
+
+  if (isLogin) {
+    title.innerText = "Login";
+    mainBtn.innerText = "Login";
+    mainBtn.onclick = login;
+    toggleText.innerText = "Don't have an account? Signup";
+
+    email.style.display = "none";
+    fullname.style.display = "none";
+    phone.style.display = "none";
+
+  } else {
+    title.innerText = "Signup";
+    mainBtn.innerText = "Signup";
+    mainBtn.onclick = signup;
+    toggleText.innerText = "Already have an account? Login";
+
+    email.style.display = "block";
+    fullname.style.display = "block";
+    phone.style.display = "block";
+  }
+}
+
+// LOGIN
+async function login() {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      username: user.value,
+      password: pass.value
+    })
+  });
+
+  if (!res.ok) {
+    alert("Login failed");
+    return;
+  }
+
+  const data = await res.json();
+
+  localStorage.accessToken = data.accessToken;
+  localStorage.refreshToken = data.refreshToken;
+
+  location.href = "/app.html";
+}
+
+// SIGNUP
+async function signup() {
+  const res = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      username: user.value,
+      password: pass.value,
+      email: email.value,
+      fullname: fullname.value,
+      phone: phone.value
+    })
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    alert(data.error || "Signup failed");
+    return;
+  }
+
+  alert("Signup success! Please login");
+
+  // clear input
+  user.value = "";
+  pass.value = "";
+  email.value = "";
+  fullname.value = "";
+  phone.value = "";
+
+  // 👉 chuyển về login
+  toggle();
+}
+</script>

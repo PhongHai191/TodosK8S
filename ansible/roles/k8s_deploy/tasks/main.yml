@@ -1,0 +1,139 @@
+---
+# ── ECR imagePullSecret ────────────────────────────────────────────────────────
+- name: Get ECR login token
+  command: aws ecr get-login-password --region {{ aws_region }}
+  delegate_to: localhost
+  register: ecr_token
+  changed_when: false
+  no_log: true
+
+- name: Refresh ECR imagePullSecret
+  shell: |
+    kubectl create secret docker-registry ecr-secret \
+      --namespace={{ namespace }} \
+      --docker-server={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com \
+      --docker-username=AWS \
+      --docker-password="{{ ecr_token.stdout }}" \
+      --dry-run=client -o yaml | kubectl apply -f -
+  changed_when: true
+  no_log: true
+
+# ── Detect first deploy vs rolling update ──────────────────────────────────────
+- name: Check if backend deployment exists
+  command: kubectl get deployment backend -n {{ namespace }}
+  register: backend_exists
+  changed_when: false
+  failed_when: false
+
+- name: Check if frontend deployment exists
+  command: kubectl get deployment frontend -n {{ namespace }}
+  register: frontend_exists
+  changed_when: false
+  failed_when: false
+
+# ── First deploy: kubectl apply (tạo mới) ─────────────────────────────────────
+- name: Apply backend manifest (first deploy)
+  command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/backend.yaml
+  when: backend_exists.rc != 0
+  changed_when: true
+
+- name: Apply frontend manifest (first deploy)
+  command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/frontend.yaml
+  when: frontend_exists.rc != 0
+  changed_when: true
+
+# ── Rolling update: kubectl set image (normal deploy) ─────────────────────────
+- name: Capture previous backend image tag
+  command: >
+    kubectl get deployment backend -n {{ namespace }}
+    -o jsonpath='{.spec.template.spec.containers[0].image}'
+  register: prev_backend_image
+  changed_when: false
+  failed_when: false
+  when: backend_exists.rc == 0
+
+- name: Capture previous frontend image tag
+  command: >
+    kubectl get deployment frontend -n {{ namespace }}
+    -o jsonpath='{.spec.template.spec.containers[0].image}'
+  register: prev_frontend_image
+  changed_when: false
+  failed_when: false
+  when: frontend_exists.rc == 0
+
+- name: Set previous tags as facts
+  set_fact:
+    prev_backend_tag:  "{{ prev_backend_image.stdout  | default('') | regex_search(':(.+)$', '\\1') | first | default('latest') }}"
+    prev_frontend_tag: "{{ prev_frontend_image.stdout | default('') | regex_search(':(.+)$', '\\1') | first | default('latest') }}"
+
+- name: Rolling update backend image
+  command: >
+    kubectl set image deployment/backend
+    backend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/awstodo-backend:{{ image_tag }}
+    -n {{ namespace }}
+  when: backend_exists.rc == 0
+  changed_when: true
+
+- name: Rolling update frontend image
+  command: >
+    kubectl set image deployment/frontend
+    frontend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/awstodo-nginx:{{ image_tag }}
+    -n {{ namespace }}
+  when: frontend_exists.rc == 0
+  changed_when: true
+
+# ── Wait for rollout ───────────────────────────────────────────────────────────
+- name: Wait for backend rollout
+  command: kubectl rollout status deployment/backend -n {{ namespace }} --timeout=180s
+  changed_when: false
+
+- name: Wait for frontend rollout
+  command: kubectl rollout status deployment/frontend -n {{ namespace }} --timeout=180s
+  changed_when: false
+
+# ── Health check ───────────────────────────────────────────────────────────────
+- name: Get ingress-nginx ClusterIP
+  command: >
+    kubectl get svc ingress-nginx-controller -n ingress-nginx
+    -o jsonpath='{.spec.clusterIP}'
+  register: ingress_clusterip
+  changed_when: false
+
+- name: Health check via ingress
+  uri:
+    url: "http://{{ ingress_clusterip.stdout }}/health/db"
+    method: GET
+    status_code: 200
+    timeout: 5
+  register: health
+  retries: 12
+  delay: 10
+  until: health.status == 200
+
+# ── Rollback (rolling update only — first deploy không có gì để rollback) ──────
+- name: Rollback backend on failure
+  command: >
+    kubectl set image deployment/backend
+    backend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/awstodo-backend:{{ prev_backend_tag }}
+    -n {{ namespace }}
+  when: health is failed and backend_exists.rc == 0
+  changed_when: true
+
+- name: Rollback frontend on failure
+  command: >
+    kubectl set image deployment/frontend
+    frontend={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com/awstodo-nginx:{{ prev_frontend_tag }}
+    -n {{ namespace }}
+  when: health is failed and frontend_exists.rc == 0
+  changed_when: true
+
+- name: Fail pipeline after rollback
+  fail:
+    msg: >
+      Health check failed.
+      {% if backend_exists.rc == 0 %}
+      Rolled back to backend:{{ prev_backend_tag }}, frontend:{{ prev_frontend_tag }}.
+      {% else %}
+      First deploy failed — check pod logs: kubectl logs -n {{ namespace }} deployment/backend
+      {% endif %}
+  when: health is failed

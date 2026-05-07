@@ -1,0 +1,139 @@
+---
+# Bootstrap + preflight — idempotent, an toàn chạy mọi lần
+# Lần đầu: tạo namespaces, secret, apply manifests, init DB
+# Những lần sau: verify cluster ready, skip các bước đã tồn tại
+# Usage: ansible-playbook -i inventories/dev playbooks/site.yml
+- name: K8s bootstrap and preflight
+  hosts: k8s_master
+  gather_facts: false
+
+  vars:
+    aws_region:     "{{ lookup('env', 'AWS_REGION')     | default('ap-southeast-2', true) }}"
+    aws_account_id: "{{ lookup('env', 'AWS_ACCOUNT_ID') }}"
+    namespace: todoapp
+    k8s_manifests_dir: /home/ubuntu/k8s
+
+  tasks:
+    # ── Preflight ──────────────────────────────────────────────────────────────
+    - name: kubectl available
+      command: kubectl version --client --output=yaml
+      changed_when: false
+
+    - name: Cluster nodes ready
+      command: kubectl get nodes --no-headers
+      register: nodes
+      changed_when: false
+      failed_when: "'NotReady' in nodes.stdout"
+
+    - name: Show nodes
+      debug:
+        msg: "{{ nodes.stdout_lines }}"
+
+    - name: ingress-nginx controller running
+      command: >
+        kubectl get pods -n ingress-nginx
+        -l app.kubernetes.io/component=controller
+        --no-headers
+      register: ingress_pods
+      changed_when: false
+      failed_when: ingress_pods.stdout == '' or 'Running' not in ingress_pods.stdout
+
+    # ── Namespaces ─────────────────────────────────────────────────────────────
+    - name: Apply namespaces
+      command: kubectl apply -f {{ k8s_manifests_dir }}/namespaces.yaml
+      changed_when: false
+
+    # ── ECR imagePullSecret ────────────────────────────────────────────────────
+    - name: Get ECR login token
+      command: aws ecr get-login-password --region {{ aws_region }}
+      delegate_to: localhost
+      register: ecr_token
+      changed_when: false
+      no_log: true
+
+    - name: Apply ECR imagePullSecret
+      shell: |
+        kubectl create secret docker-registry ecr-secret \
+          --namespace={{ namespace }} \
+          --docker-server={{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com \
+          --docker-username=AWS \
+          --docker-password="{{ ecr_token.stdout }}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+      changed_when: true
+      no_log: true
+
+    # ── ConfigMap + Secret ─────────────────────────────────────────────────────
+    - name: Apply todoapp configmap
+      command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/configmap.yaml
+      changed_when: false
+
+    - name: Check todoapp-secret exists
+      command: kubectl get secret todoapp-secret -n {{ namespace }}
+      register: secret_check
+      changed_when: false
+      failed_when: false
+
+    - name: Apply todoapp secret (first deploy only)
+      command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/secret.yaml
+      when: secret_check.rc != 0
+      changed_when: true
+
+    - name: Warn if secret already exists
+      debug:
+        msg: "todoapp-secret already exists — skipping. Update manually if credentials changed."
+      when: secret_check.rc == 0
+
+    # ── App manifests ──────────────────────────────────────────────────────────
+    - name: Apply backend manifest
+      command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/backend.yaml
+      changed_when: false
+
+    - name: Apply frontend manifest
+      command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/frontend.yaml
+      changed_when: false
+
+    - name: Apply ingress
+      command: kubectl apply -f {{ k8s_manifests_dir }}/ingress/ingress.yaml
+      changed_when: false
+
+    # ── Monitoring ─────────────────────────────────────────────────────────────
+    - name: Apply monitoring stack
+      command: kubectl apply -f {{ k8s_manifests_dir }}/monitoring/{{ item }}
+      loop:
+        - prometheus.yaml
+        - grafana.yaml
+        - node-exporter.yaml
+        - kube-state-metrics.yaml
+      changed_when: false
+
+    # ── Logging ────────────────────────────────────────────────────────────────
+    - name: Apply logging stack
+      command: kubectl apply -f {{ k8s_manifests_dir }}/logging/{{ item }}
+      loop:
+        - loki.yaml
+        - promtail.yaml
+      changed_when: false
+
+    # ── DB init (first deploy only) ────────────────────────────────────────────
+    - name: Check if DB already initialized
+      command: >
+        kubectl exec -n {{ namespace }} deployment/backend
+        -- node -e "
+          const {Pool}=require('pg');
+          const p=new Pool();
+          p.query(\"SELECT COUNT(*) FROM pg_tables WHERE schemaname='public'\")
+           .then(r=>{console.log(r.rows[0].count);p.end()})
+           .catch(e=>{console.error(e.message);process.exit(1)});"
+      register: table_count
+      changed_when: false
+      failed_when: false
+      ignore_errors: true
+
+    - name: Init DB schema (first deploy only)
+      command: >
+        ansible-playbook -i inventories/dev playbooks/db.yml --tags init
+      delegate_to: localhost
+      args:
+        chdir: "{{ playbook_dir }}/.."
+      when: table_count.rc != 0 or (table_count.stdout | trim) == '0'
+      changed_when: true

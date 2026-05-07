@@ -1,0 +1,40 @@
+---
+# Database init — chạy một lần khi tạo mới RDS hoặc reset schema
+# Chạy trên master VM vì master có network access ra RDS (qua NAT/public)
+# Usage: ansible-playbook -i inventories/dev playbooks/db.yml --tags init
+#        ansible-playbook -i inventories/dev playbooks/db.yml --tags check
+- name: Database operations
+  hosts: k8s_master
+  gather_facts: false
+  run_once: true
+
+  vars:
+    aws_region: "{{ lookup('env', 'AWS_REGION') | default('ap-southeast-2', true) }}"
+    db_secret_name: "awstodo/dev/db/credentials"
+
+  tasks:
+    - name: Init database schema
+      ansible.builtin.include_role:
+        name: db_init
+        apply:
+          tags: [init]
+      tags: [init]
+
+    - name: Check DB connectivity from backend pod
+      command: >
+        kubectl exec -n todoapp
+        deployment/backend
+        -- node -e "
+          const {Pool}=require('pg');
+          const p=new Pool();
+          p.query('SELECT 1')
+           .then(()=>{console.log('DB OK');p.end()})
+           .catch(e=>{console.error(e.message);process.exit(1)});"
+      register: db_check
+      changed_when: false
+      tags: [check]
+
+    - name: Show connectivity result
+      debug:
+        msg: "{{ db_check.stdout }}"
+      tags: [check]

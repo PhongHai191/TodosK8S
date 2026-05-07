@@ -1,0 +1,6 @@
+*.retry
+.ansible/
+*.log
+*.pem
+*.key
+inventory/

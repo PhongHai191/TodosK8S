@@ -1,0 +1,70 @@
+version: "3.8"
+
+services:
+  backend:
+    image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/awstodo-backend:${TAG}
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DB_SECRET_NAME: ${DB_SECRET_NAME}
+      DB_NAME: ${DB_NAME}
+      REDIS_HOST: ${REDIS_HOST}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      ACCESS_EXPIRE: ${ACCESS_EXPIRE}
+      REFRESH_EXPIRE: ${REFRESH_EXPIRE}
+      AWS_REGION: ${AWS_REGION}
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /todoapp/${ENVIRONMENT}/backend
+        awslogs-stream: backend
+        awslogs-create-group: "true"
+
+  nginx:
+    image: 529646246979.dkr.ecr.ap-southeast-2.amazonaws.com/awstodo-nginx:${TAG}
+    container_name: nginx
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: /todoapp/${ENVIRONMENT}/nginx
+        awslogs-stream: nginx
+        awslogs-create-group: "true"
+
+  node_exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    pid: host
+    hostname: ${INSTANCE_ID:-web}
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    ports:
+      - "9100:9100"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"

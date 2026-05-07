@@ -1,0 +1,124 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # CI — lint + deps
+  # ─────────────────────────────────────────────────────────────────────────────
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate structure
+        run: |
+          set -e
+          test -d backend  || (echo "backend/ missing"  && exit 1)
+          test -d frontend || (echo "frontend/ missing" && exit 1)
+          test -d k8s      || (echo "k8s/ missing"      && exit 1)
+
+      - name: Install backend deps
+        run: cd backend && npm ci
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # BUILD — build + push image lên ECR
+  # Chạy trên GitHub-hosted runner (có Docker sẵn)
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    needs: ci
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      BACKEND_IMAGE:  ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/awstodo-backend
+      FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/awstodo-nginx
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/awstodo-dev-github-actions-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push backend
+        run: |
+          docker build -t $BACKEND_IMAGE:${{ github.sha }} ./backend
+          docker push    $BACKEND_IMAGE:${{ github.sha }}
+          docker tag     $BACKEND_IMAGE:${{ github.sha }} $BACKEND_IMAGE:latest
+          docker push    $BACKEND_IMAGE:latest
+
+      - name: Build & push frontend
+        run: |
+          docker build -t $FRONTEND_IMAGE:${{ github.sha }} ./frontend
+          docker push    $FRONTEND_IMAGE:${{ github.sha }}
+          docker tag     $FRONTEND_IMAGE:${{ github.sha }} $FRONTEND_IMAGE:latest
+          docker push    $FRONTEND_IMAGE:latest
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # DEPLOY — self-hosted runner (WSL2 Ubuntu trên Windows host)
+  #   WSL2 cần: ansible, boto3, rsync, SSH key ~/.ssh/k8s_master → master VM
+  #   Ansible SSH vào master → kubectl → cluster
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy:
+    needs: build
+    runs-on: self-hosted
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/awstodo-dev-github-actions-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Sync k8s manifests lên master mỗi lần deploy
+      # để site.yml luôn apply phiên bản mới nhất từ repo
+      - name: Sync k8s manifests to master
+        run: |
+          rsync -az --delete \
+            -e "ssh -i $HOME/.ssh/k8s_master -o StrictHostKeyChecking=no" \
+            k8s/ ubuntu@192.168.241.10:/home/ubuntu/k8s/
+
+      # Bootstrap + preflight: tạo namespaces, secrets, manifests, db init nếu chưa có
+      - name: Bootstrap and preflight
+        working-directory: ansible
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION:     ${{ secrets.AWS_REGION }}
+        run: |
+          ansible-playbook -i inventories/dev playbooks/site.yml
+
+      # Rolling update image mới, health check, rollback nếu fail
+      - name: Deploy to K8s
+        working-directory: ansible
+        env:
+          IMAGE_TAG:      ${{ github.sha }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION:     ${{ secrets.AWS_REGION }}
+        run: |
+          ansible-playbook -i inventories/dev playbooks/web.yml

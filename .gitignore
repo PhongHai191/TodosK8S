@@ -1,0 +1,10 @@
+node_modules
+.env
+.pem
+.md
+.sh
+.ps1
+*.tfvars
+*.tfvars.json
+.md
+

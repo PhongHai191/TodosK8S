@@ -1,0 +1,16 @@
+---
+# Deploy webapp — idempotent rolling update (hoặc first deploy nếu chưa có)
+# Usage: IMAGE_TAG=<sha> ansible-playbook -i inventories/dev playbooks/web.yml
+- name: Deploy webapp to K8s
+  hosts: k8s_master
+  gather_facts: false
+
+  vars:
+    image_tag:           "{{ lookup('env', 'IMAGE_TAG')      | default('latest', true) }}"
+    aws_account_id:      "{{ lookup('env', 'AWS_ACCOUNT_ID') }}"
+    aws_region:          "{{ lookup('env', 'AWS_REGION')     | default('ap-southeast-2', true) }}"
+    namespace:           todoapp
+    k8s_manifests_dir:   /home/ubuntu/k8s
+
+  roles:
+    - k8s_deploy
