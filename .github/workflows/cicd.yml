@@ -9,7 +9,7 @@ jobs:
   # CI — lint + deps
   # ─────────────────────────────────────────────────────────────────────────────
   ci:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -36,7 +36,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   build:
     needs: ci
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     permissions:
       id-token: write
