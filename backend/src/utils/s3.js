@@ -27,7 +27,8 @@ async function getUploadUrl(filename, type) {
   });
 
   const uploadUrl = await getSignedUrl(s3, command, {
-    expiresIn: 60 
+    expiresIn: 60,
+    unhoistableHeaders: new Set(["x-amz-checksum-crc32"])
   });
 
   return {
