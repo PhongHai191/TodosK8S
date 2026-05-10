@@ -8,7 +8,9 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 // init S3
 const s3 = new S3Client({
-  region: process.env.AWS_REGION
+  region: process.env.AWS_REGION,
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED"
 });
 
 const BUCKET = process.env.AWS_S3_BUCKET;
@@ -27,8 +29,7 @@ async function getUploadUrl(filename, type) {
   });
 
   const uploadUrl = await getSignedUrl(s3, command, {
-    expiresIn: 60,
-    unhoistableHeaders: new Set(["x-amz-checksum-crc32"])
+    expiresIn: 60
   });
 
   return {
