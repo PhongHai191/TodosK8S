@@ -64,6 +64,9 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: k8s-worker-2
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
       containers:
         - name: loki
           image: grafana/loki:2.9.6

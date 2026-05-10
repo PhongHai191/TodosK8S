@@ -1,0 +1,156 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+data:
+  node-metrics.json: |
+    {
+      "title": "Node Metrics",
+      "uid": "node-metrics",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "schemaVersion": 36,
+      "refresh": "30s",
+      "panels": [
+        {
+          "id": 1, "type": "timeseries", "title": "CPU Usage %",
+          "gridPos": {"x":0,"y":0,"w":12,"h":8},
+          "targets": [{"expr":"100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[2m])) * 100)","legendFormat":"{{instance}}","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"percent","min":0,"max":100}}
+        },
+        {
+          "id": 2, "type": "timeseries", "title": "Memory Usage %",
+          "gridPos": {"x":12,"y":0,"w":12,"h":8},
+          "targets": [{"expr":"100 - ((node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)","legendFormat":"{{instance}}","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"percent","min":0,"max":100}}
+        },
+        {
+          "id": 3, "type": "timeseries", "title": "Disk Usage %",
+          "gridPos": {"x":0,"y":8,"w":12,"h":8},
+          "targets": [{"expr":"100 - ((node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"}) * 100)","legendFormat":"{{instance}}","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"percent","min":0,"max":100}}
+        },
+        {
+          "id": 4, "type": "timeseries", "title": "Network Traffic",
+          "gridPos": {"x":12,"y":8,"w":12,"h":8},
+          "targets": [
+            {"expr":"rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cali.*|tunl.*\"}[2m])","legendFormat":"rx {{instance}} {{device}}","datasource":"Prometheus"},
+            {"expr":"rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cali.*|tunl.*\"}[2m])","legendFormat":"tx {{instance}} {{device}}","datasource":"Prometheus"}
+          ],
+          "fieldConfig": {"defaults":{"unit":"Bps"}}
+        }
+      ]
+    }
+
+  pod-metrics.json: |
+    {
+      "title": "Pod Metrics",
+      "uid": "pod-metrics",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "schemaVersion": 36,
+      "refresh": "30s",
+      "panels": [
+        {
+          "id": 1, "type": "timeseries", "title": "Pod CPU Usage %",
+          "gridPos": {"x":0,"y":0,"w":12,"h":8},
+          "targets": [{"expr":"sum by(pod) (label_replace(rate(container_cpu_usage_seconds_total{namespace=\"todoapp\",container!=\"\",container!=\"POD\"}[2m]),\"pod_short\",\"$1\",\"pod\",\"([a-z-]+)-[a-z0-9]+-[a-z0-9]+$\")) * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1) * 100","legendFormat":"{{pod_short}}","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"percent","min":0}}
+        },
+        {
+          "id": 2, "type": "timeseries", "title": "Pod Memory Usage",
+          "gridPos": {"x":12,"y":0,"w":12,"h":8},
+          "targets": [{"expr":"sum by(pod) (label_replace(container_memory_working_set_bytes{namespace=\"todoapp\",container!=\"\",container!=\"POD\"},\"pod_short\",\"$1\",\"pod\",\"([a-z-]+)-[a-z0-9]+-[a-z0-9]+$\")) * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1)","legendFormat":"{{pod_short}}","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"bytes"}}
+        },
+        {
+          "id": 4, "type": "table", "title": "Pod Restarts",
+          "gridPos": {"x":0,"y":8,"w":24,"h":6},
+          "targets": [{"expr":"increase(kube_pod_container_status_restarts_total{namespace=\"todoapp\"}[1h]) * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1)","legendFormat":"","datasource":"Prometheus","instant":true,"format":"table"}],
+          "transformations": [
+            {"id":"organize","options":{"excludeByName":{"Time":true,"__name__":true,"endpoint":true,"instance":true,"job":true,"namespace":true,"service":true,"uid":true},"renameByName":{"pod":"Pod","container":"Container","Value":"Restarts (1h)"}}}
+          ],
+          "fieldConfig": {"defaults":{"custom":{"align":"left"}},
+            "overrides":[{"matcher":{"id":"byName","options":"Restarts (1h)"},"properties":[{"id":"custom.width","value":120},{"id":"thresholds","value":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"yellow","value":1},{"color":"red","value":5}]}},{"id":"custom.displayMode","value":"color-background"}]}]}
+        }
+      ]
+    }
+
+  backend-metrics.json: |
+    {
+      "title": "Backend App Metrics",
+      "uid": "backend-metrics",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "schemaVersion": 36,
+      "refresh": "15s",
+      "panels": [
+        {
+          "id": 1, "type": "timeseries", "title": "Request Rate (req/s)",
+          "gridPos": {"x":0,"y":0,"w":12,"h":8},
+          "targets": [{"expr":"sum by(method, route, status_code) (rate(http_requests_total{route!=\"/health\",route!=\"/health/db\",route!=\"/metrics\"}[2m]))","legendFormat":"{{method}} {{route}} {{status_code}}","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"reqps"}}
+        },
+        {
+          "id": 2, "type": "timeseries", "title": "Request Latency p99 (ms)",
+          "gridPos": {"x":12,"y":0,"w":12,"h":8},
+          "targets": [{"expr":"histogram_quantile(0.99, sum by(le, route) (rate(http_request_duration_seconds_bucket{route!=\"/health\",route!=\"/metrics\"}[2m]))) * 1000","legendFormat":"p99 {{route}}","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"ms"}}
+        },
+        {
+          "id": 3, "type": "timeseries", "title": "Error Rate (5xx)",
+          "gridPos": {"x":0,"y":8,"w":12,"h":8},
+          "targets": [{"expr":"sum by(route) (rate(http_requests_total{status_code=~\"5..\"}[2m]))","legendFormat":"{{route}}","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"reqps","custom":{"lineWidth":2},"color":{"fixedColor":"red","mode":"fixed"}}}
+        },
+        {
+          "id": 4, "type": "stat", "title": "Total Requests (last 5m)",
+          "gridPos": {"x":12,"y":8,"w":6,"h":8},
+          "targets": [{"expr":"sum(increase(http_requests_total{route!=\"/health\",route!=\"/health/db\",route!=\"/metrics\"}[5m]))","legendFormat":"Total","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"short"}}
+        },
+        {
+          "id": 6, "type": "stat", "title": "Active Users (active sessions)",
+          "gridPos": {"x":18,"y":8,"w":6,"h":8},
+          "targets": [{"expr":"sum(increase(http_requests_total{route=~\"/api/.*\",status_code=\"200\"}[5m]))","legendFormat":"Active","datasource":"Prometheus"}],
+          "fieldConfig": {"defaults":{"unit":"short","color":{"fixedColor":"green","mode":"fixed"}}}
+        },
+        {
+          "id": 7, "type": "barchart", "title": "Total Requests by Endpoint (last 30m)",
+          "gridPos": {"x":0,"y":16,"w":24,"h":10},
+          "targets": [{"expr":"sort_desc(sum by(route, method) (increase(http_requests_total{route!=\"/health\",route!=\"/health/db\",route!=\"/metrics\"}[30m])))","legendFormat":"{{method}} {{route}}","datasource":"Prometheus","instant":true}],
+          "fieldConfig": {"defaults":{"unit":"short"}},
+          "options": {"xTickLabelRotation":-45,"barWidth":0.7,"groupWidth":0.7}
+        }
+      ]
+    }
+
+  logs.json: |
+    {
+      "title": "Application Logs",
+      "uid": "app-logs",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "schemaVersion": 36,
+      "refresh": "30s",
+      "panels": [
+        {
+          "id": 1, "type": "logs", "title": "Backend Logs",
+          "gridPos": {"x":0,"y":0,"w":24,"h":10},
+          "datasource": {"type": "loki", "uid": "P8E80F9AEF21F6940"},
+          "targets": [{"expr":"{namespace=\"todoapp\", container=\"backend\"}","refId":"A","datasource":{"type":"loki","uid":"Loki"}}],
+          "options": {"dedupStrategy":"none","enableLogDetails":true,"sortOrder":"Descending","wrapLogMessage":true}
+        },
+        {
+          "id": 2, "type": "logs", "title": "Frontend Logs",
+          "gridPos": {"x":0,"y":10,"w":24,"h":8},
+          "datasource": {"type": "loki", "uid": "P8E80F9AEF21F6940"},
+          "targets": [{"expr":"{namespace=\"todoapp\", container=\"frontend\"}","refId":"A","datasource":{"type":"loki","uid":"Loki"}}],
+          "options": {"dedupStrategy":"none","enableLogDetails":true,"sortOrder":"Descending","wrapLogMessage":true}
+        },
+        {
+          "id": 3, "type": "timeseries", "title": "Error Log Rate",
+          "gridPos": {"x":0,"y":18,"w":24,"h":8},
+          "datasource": {"type": "loki", "uid": "P8E80F9AEF21F6940"},
+          "targets": [{"expr":"sum by(container) (rate({namespace=\"todoapp\"} |= \"error\" [2m]))","legendFormat":"{{container}}","refId":"A","datasource":{"type":"loki","uid":"Loki"}}],
+          "fieldConfig": {"defaults":{"unit":"short","color":{"fixedColor":"red","mode":"fixed"}}}
+        }
+      ]
+    }
