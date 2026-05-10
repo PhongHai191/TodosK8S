@@ -108,8 +108,9 @@ jobs:
       - name: Bootstrap and preflight
         working-directory: ansible
         env:
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_REGION:     ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID:  ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION:      ${{ secrets.AWS_REGION }}
+          ANSIBLE_CONFIG:  ${{ github.workspace }}/ansible/ansible.cfg
         run: |
           ansible-playbook -i inventories/dev playbooks/site.yml
 
@@ -117,8 +118,9 @@ jobs:
       - name: Deploy to K8s
         working-directory: ansible
         env:
-          IMAGE_TAG:      ${{ github.sha }}
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          AWS_REGION:     ${{ secrets.AWS_REGION }}
+          IMAGE_TAG:       ${{ github.sha }}
+          AWS_ACCOUNT_ID:  ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION:      ${{ secrets.AWS_REGION }}
+          ANSIBLE_CONFIG:  ${{ github.workspace }}/ansible/ansible.cfg
         run: |
           ansible-playbook -i inventories/dev playbooks/web.yml
