@@ -1,4 +1,4 @@
 variable "project_name" { type = string }
 variable "environment"  { type = string }
 variable "vpc_id"       { type = string }
-variable "trusted_ip"   { type = string }
+variable "trusted_ips"  { type = list(string) }

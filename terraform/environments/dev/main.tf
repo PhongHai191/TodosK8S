@@ -52,7 +52,7 @@ module "security_groups" {
   project_name = var.project_name
   environment  = var.environment
   vpc_id       = module.network.vpc_id
-  trusted_ip   = var.trusted_ip
+  trusted_ips  = var.trusted_ips
 }
 
 # ── IAM ────────────────────────────────────────────────────────────────────────
@@ -117,61 +117,6 @@ resource "aws_iam_user_policy" "backend_s3" {
 
 resource "aws_iam_access_key" "backend_s3" {
   user = aws_iam_user.backend_s3.name
-}
-
-# ── ECR Repositories ───────────────────────────────────────────────────────────
-resource "aws_ecr_repository" "backend" {
-  name                 = "${var.project_name}-backend"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = { Name = "${var.project_name}-backend" }
-}
-
-resource "aws_ecr_repository" "nginx" {
-  name                 = "${var.project_name}-nginx"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = { Name = "${var.project_name}-nginx" }
-}
-
-resource "aws_ecr_lifecycle_policy" "backend" {
-  repository = aws_ecr_repository.backend.name
-  policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last 10 images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 10
-      }
-      action = { type = "expire" }
-    }]
-  })
-}
-
-resource "aws_ecr_lifecycle_policy" "nginx" {
-  repository = aws_ecr_repository.nginx.name
-  policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last 10 images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 10
-      }
-      action = { type = "expire" }
-    }]
-  })
 }
 
 # ── S3 ─────────────────────────────────────────────────────────────────────────

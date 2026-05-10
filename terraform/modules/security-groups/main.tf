@@ -21,7 +21,7 @@ resource "aws_security_group_rule" "redis_ingress_trusted" {
   from_port         = 6379
   to_port           = 6379
   protocol          = "tcp"
-  cidr_blocks       = [var.trusted_ip]
+  cidr_blocks       = var.trusted_ips
 }
 
 resource "aws_security_group_rule" "redis_egress_all" {
@@ -42,7 +42,7 @@ resource "aws_security_group_rule" "rds_ingress_trusted" {
   from_port         = 5432
   to_port           = 5432
   protocol          = "tcp"
-  cidr_blocks       = [var.trusted_ip]
+  cidr_blocks       = var.trusted_ips
 }
 
 resource "aws_security_group_rule" "rds_egress_all" {

@@ -15,12 +15,12 @@ variable "vpc_cidr"            { type = string }
 variable "availability_zones"  { type = list(string) }
 variable "public_subnet_cidrs" { type = list(string) }
 
-variable "trusted_ip" {
-  type        = string
-  description = "Trusted CIDR for RDS/Redis ingress, e.g. 1.2.3.4/32"
+variable "trusted_ips" {
+  type        = list(string)
+  description = "Trusted CIDRs for RDS/Redis ingress, e.g. [\"1.2.3.4/32\"]"
   validation {
-    condition     = can(cidrhost(var.trusted_ip, 0))
-    error_message = "trusted_ip must be a valid CIDR block, e.g. 1.2.3.4/32"
+    condition     = alltrue([for ip in var.trusted_ips : can(cidrhost(ip, 0))])
+    error_message = "Each entry in trusted_ips must be a valid CIDR block, e.g. 1.2.3.4/32"
   }
 }
 
