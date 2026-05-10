@@ -104,19 +104,19 @@ data:
         {
           "id": 4, "type": "stat", "title": "Total Requests (last 5m)",
           "gridPos": {"x":12,"y":8,"w":6,"h":8},
-          "targets": [{"expr":"sum(increase(http_requests_total{route!=\"/health\",route!=\"/health/db\",route!=\"/metrics\"}[5m]))","legendFormat":"Total","datasource":"Prometheus"}],
+          "targets": [{"expr":"round(sum(increase(http_requests_total{route!=\"/health\",route!=\"/health/db\",route!=\"/metrics\"}[5m])))","legendFormat":"Total","datasource":"Prometheus"}],
           "fieldConfig": {"defaults":{"unit":"short"}}
         },
         {
           "id": 6, "type": "stat", "title": "Active Users (active sessions)",
           "gridPos": {"x":18,"y":8,"w":6,"h":8},
-          "targets": [{"expr":"sum(increase(http_requests_total{route=~\"/api/.*\",status_code=\"200\"}[5m]))","legendFormat":"Active","datasource":"Prometheus"}],
+          "targets": [{"expr":"round(sum(increase(http_requests_total{route=~\"/api/.*\",status_code=\"200\"}[5m])))","legendFormat":"Active","datasource":"Prometheus"}],
           "fieldConfig": {"defaults":{"unit":"short","color":{"fixedColor":"green","mode":"fixed"}}}
         },
         {
           "id": 7, "type": "barchart", "title": "Total Requests by Endpoint (last 30m)",
           "gridPos": {"x":0,"y":16,"w":24,"h":10},
-          "targets": [{"expr":"sort_desc(sum by(route, method) (increase(http_requests_total{route!=\"/health\",route!=\"/health/db\",route!=\"/metrics\"}[30m])))","legendFormat":"{{method}} {{route}}","datasource":"Prometheus","instant":true}],
+          "targets": [{"expr":"sort_desc(round(sum by(route, method) (increase(http_requests_total{route!=\"/health\",route!=\"/health/db\",route!=\"/metrics\"}[30m]))))","legendFormat":"{{method}} {{route}}","datasource":"Prometheus","instant":true}],
           "fieldConfig": {"defaults":{"unit":"short"}},
           "options": {"xTickLabelRotation":-45,"barWidth":0.7,"groupWidth":0.7}
         }
