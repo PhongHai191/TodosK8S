@@ -53,13 +53,13 @@ data:
         {
           "id": 1, "type": "timeseries", "title": "Pod CPU Usage %",
           "gridPos": {"x":0,"y":0,"w":12,"h":8},
-          "targets": [{"expr":"sum by(pod) (label_replace(rate(container_cpu_usage_seconds_total{namespace=\"todoapp\",container!=\"\",container!=\"POD\"}[2m]),\"pod_short\",\"$1\",\"pod\",\"([a-z-]+)-[a-z0-9]+-[a-z0-9]+$\")) * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1) * 100","legendFormat":"{{pod_short}}","datasource":"Prometheus"}],
+          "targets": [{"expr":"sum by(container) (rate(container_cpu_usage_seconds_total{namespace=\"todoapp\",container!=\"\",container!=\"POD\"}[2m]) * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1)) * 100","legendFormat":"{{container}}","datasource":"Prometheus"}],
           "fieldConfig": {"defaults":{"unit":"percent","min":0}}
         },
         {
           "id": 2, "type": "timeseries", "title": "Pod Memory Usage",
           "gridPos": {"x":12,"y":0,"w":12,"h":8},
-          "targets": [{"expr":"sum by(pod) (label_replace(container_memory_working_set_bytes{namespace=\"todoapp\",container!=\"\",container!=\"POD\"},\"pod_short\",\"$1\",\"pod\",\"([a-z-]+)-[a-z0-9]+-[a-z0-9]+$\")) * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1)","legendFormat":"{{pod_short}}","datasource":"Prometheus"}],
+          "targets": [{"expr":"sum by(container) (container_memory_working_set_bytes{namespace=\"todoapp\",container!=\"\",container!=\"POD\"} * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1))","legendFormat":"{{container}}","datasource":"Prometheus"}],
           "fieldConfig": {"defaults":{"unit":"bytes"}}
         },
         {
