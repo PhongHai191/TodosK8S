@@ -14,7 +14,7 @@ spec:
         app: redis
     spec:
       nodeSelector:
-        kubernetes.io/hostname: k8s-worker-2
+        kubernetes.io/hostname: k8s-worker-1
       containers:
         - name: redis
           image: redis:7-alpine
