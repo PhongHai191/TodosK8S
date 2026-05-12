@@ -115,28 +115,48 @@
       changed_when: false
 
     # ── DB init (first deploy only) ────────────────────────────────────────────
-    # Wait for backend pods to be Running before checking DB state —
-    # kubectl exec hangs indefinitely if the pod is not yet Ready.
-    - name: Wait for backend deployment to be ready
+    # DB init runs BEFORE waiting for backend rollout to avoid the chicken-and-egg
+    # problem: backend pod fails readinessProbe because schema doesn't exist yet,
+    # so rollout never completes, so DB init never runs.
+    #
+    # We check DB state via psql directly from master (not kubectl exec into the
+    # pod) so this works even when backend pods are not yet Ready.
+    - name: Fetch DB credentials from secret for init check
       command: >
-        kubectl rollout status deployment/backend
-        -n {{ namespace }}
-        --timeout=120s
+        kubectl get secret todoapp-secret -n {{ namespace }}
+        -o jsonpath='{.data.{{ item.key }}}'
+      loop:
+        - { key: DB_HOST, var: db_host }
+        - { key: DB_USER, var: db_user }
+        - { key: DB_PASS, var: db_pass }
+        - { key: DB_NAME, var: db_name }
+        - { key: DB_PORT, var: db_port }
+      register: preflight_secret_values
       changed_when: false
+      no_log: true
 
-    - name: Check if DB already initialized
-      command: >
-        kubectl exec -n {{ namespace }} deployment/backend
-        -- node -e "
-          const {Pool}=require('pg');
-          const p=new Pool();
-          p.query(\"SELECT COUNT(*) FROM pg_tables WHERE schemaname='public'\")
-           .then(r=>{console.log(r.rows[0].count);p.end()})
-           .catch(e=>{console.error(e.message);process.exit(1)});"
+    - name: Decode DB credentials for init check
+      set_fact:
+        preflight_db_host: "{{ (preflight_secret_values.results | selectattr('item.var', 'eq', 'db_host') | first).stdout | b64decode }}"
+        preflight_db_user: "{{ (preflight_secret_values.results | selectattr('item.var', 'eq', 'db_user') | first).stdout | b64decode }}"
+        preflight_db_pass: "{{ (preflight_secret_values.results | selectattr('item.var', 'eq', 'db_pass') | first).stdout | b64decode }}"
+        preflight_db_name: "{{ (preflight_secret_values.results | selectattr('item.var', 'eq', 'db_name') | first).stdout | b64decode }}"
+        preflight_db_port: "{{ (preflight_secret_values.results | selectattr('item.var', 'eq', 'db_port') | first).stdout | b64decode }}"
+      no_log: true
+
+    - name: Check if DB already initialized (via psql, not kubectl exec)
+      ansible.builtin.shell:
+        cmd: >
+          psql -h '{{ preflight_db_host }}' -U '{{ preflight_db_user }}'
+          -d '{{ preflight_db_name }}' -p '{{ preflight_db_port }}'
+          --connect-timeout=5 -tAc
+          "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public'"
+      environment:
+        PGPASSWORD: "{{ preflight_db_pass }}"
       register: table_count
       changed_when: false
       failed_when: false
-      ignore_errors: true
+      no_log: true
 
     # Include the role directly — avoids spawning a nested ansible-playbook
     # process which requires a second SSH handshake and has no timeout guard.
@@ -144,3 +164,11 @@
       ansible.builtin.include_role:
         name: db_init
       when: table_count.rc != 0 or (table_count.stdout | trim) == '0'
+
+    # Only wait for rollout AFTER DB schema exists so readinessProbe can pass.
+    - name: Wait for backend deployment to be ready
+      command: >
+        kubectl rollout status deployment/backend
+        -n {{ namespace }}
+        --timeout=180s
+      changed_when: false
