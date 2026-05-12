@@ -52,19 +52,20 @@
 
 - name: Wait for RDS to be ready
   ansible.builtin.shell:
-    cmd: "psql -h '{{ db_host }}' -U '{{ db_user }}' -d '{{ db_name }}' -p '{{ db_port }}' -c 'SELECT 1'"
+    # connect_timeout=5 ensures psql fails fast per attempt instead of hanging
+    cmd: "psql -h '{{ db_host }}' -U '{{ db_user }}' -d '{{ db_name }}' -p '{{ db_port }}' --connect-timeout=5 -c 'SELECT 1'"
   environment:
     PGPASSWORD: "{{ db_pass }}"
   register: rds_ping
   until: rds_ping.rc == 0
-  retries: 30
+  retries: 12   # 12 × 10 s = 2 min max (down from 5 min)
   delay: 10
   changed_when: false
   no_log: true
 
 - name: Run init.sql
   ansible.builtin.shell:
-    cmd: "psql -h '{{ db_host }}' -U '{{ db_user }}' -d '{{ db_name }}' -p '{{ db_port }}' --set ON_ERROR_STOP=1 -f /tmp/db_init.sql"
+    cmd: "psql -h '{{ db_host }}' -U '{{ db_user }}' -d '{{ db_name }}' -p '{{ db_port }}' --connect-timeout=10 --set ON_ERROR_STOP=1 -f /tmp/db_init.sql"
   environment:
     PGPASSWORD: "{{ db_pass }}"
   register: init_result

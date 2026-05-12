@@ -115,6 +115,15 @@
       changed_when: false
 
     # ── DB init (first deploy only) ────────────────────────────────────────────
+    # Wait for backend pods to be Running before checking DB state —
+    # kubectl exec hangs indefinitely if the pod is not yet Ready.
+    - name: Wait for backend deployment to be ready
+      command: >
+        kubectl rollout status deployment/backend
+        -n {{ namespace }}
+        --timeout=120s
+      changed_when: false
+
     - name: Check if DB already initialized
       command: >
         kubectl exec -n {{ namespace }} deployment/backend
@@ -129,11 +138,9 @@
       failed_when: false
       ignore_errors: true
 
+    # Include the role directly — avoids spawning a nested ansible-playbook
+    # process which requires a second SSH handshake and has no timeout guard.
     - name: Init DB schema (first deploy only)
-      command: >
-        ansible-playbook -i inventories/dev playbooks/db.yml --tags init
-      delegate_to: localhost
-      args:
-        chdir: "{{ playbook_dir }}/.."
+      ansible.builtin.include_role:
+        name: db_init
       when: table_count.rc != 0 or (table_count.stdout | trim) == '0'
-      changed_when: true
