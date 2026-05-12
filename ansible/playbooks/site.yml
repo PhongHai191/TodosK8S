@@ -149,10 +149,10 @@
         cmd: >
           psql -h '{{ preflight_db_host }}' -U '{{ preflight_db_user }}'
           -d '{{ preflight_db_name }}' -p '{{ preflight_db_port }}'
-          --connect-timeout=5 -tAc
-          "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public'"
+          -tAc "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public'"
       environment:
         PGPASSWORD: "{{ preflight_db_pass }}"
+        PGCONNECT_TIMEOUT: "5"
       register: table_count
       changed_when: false
       failed_when: false

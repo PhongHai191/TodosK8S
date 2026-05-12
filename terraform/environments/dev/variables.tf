@@ -17,12 +17,13 @@ variable "public_subnet_cidrs" { type = list(string) }
 
 variable "trusted_ips" {
   type        = list(string)
-  description = "Trusted CIDRs for RDS/Redis ingress, e.g. [\"1.2.3.4/32\"]"
+  description = "Trusted CIDRs for RDS ingress (dev machines), e.g. [\"1.2.3.4/32\"]"
   validation {
     condition     = alltrue([for ip in var.trusted_ips : can(cidrhost(ip, 0))])
     error_message = "Each entry in trusted_ips must be a valid CIDR block, e.g. 1.2.3.4/32"
   }
 }
+
 
 variable "db_username"       { 
     type = string 
