@@ -12,6 +12,9 @@ const initPromise = (async () => {
     database: process.env.DB_NAME,
     port: parseInt(process.env.DB_PORT || "5432", 10),
     ssl: sslConfig,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
   });
 
   pool.on("error", (err) => {

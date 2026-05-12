@@ -26,22 +26,23 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
-import { BASE_URL, setupUser, authHeader, getTodos, healthCheck } from './helpers.js';
+import { BASE_URL, batchSetupUsers, authHeader, getTodos, healthCheck } from './helpers.js';
 
 const loginDuration = new Trend('stress_login_duration', true);
 const listDuration  = new Trend('stress_list_duration',  true);
 const errorRate     = new Rate('stress_error_rate');
 
-// Max VUs across all stages
-const MAX_VUS = 500;
+// Max VUs across all stages — must match the highest target in stages
+const MAX_VUS = 800;
 
 export const options = {
+  setupTimeout: '8m',  // 800 accounts × ~2 req each in batches of 50
   stages: [
     { duration: '2m',  target: 100 },  // warm up at expected peak
-    { duration: '3m',  target: 200 },  // begin stress
-    { duration: '3m',  target: 300 },  // push harder
-    { duration: '3m',  target: 400 },  // heavy stress
-    { duration: '3m',  target: 500 },  // extreme — find breaking point
+    { duration: '3m',  target: 300 },  // begin stress
+    { duration: '3m',  target: 500 },  // push harder
+    { duration: '3m',  target: 700 },  // heavy stress
+    { duration: '3m',  target: 800 },  // extreme — find breaking point
     { duration: '3m',  target: 0   },  // ramp down — observe recovery
   ],
   thresholds: {
@@ -60,26 +61,24 @@ export function setup() {
   const h = healthCheck();
   console.log(`Pre-stress health: ${h.status} ${h.body}`);
 
-  console.log(`Pre-creating ${MAX_VUS} stress accounts...`);
-  const tokens = [];
-  for (let i = 1; i <= MAX_VUS; i++) {
-    const session = setupUser(`stress_vu${i}`);
-    if (!session) {
-      console.error(`Failed to setup stress_vu${i}`);
-      return { tokens };
-    }
-    tokens.push(session.accessToken);
-  }
+  console.log(`Pre-creating ${MAX_VUS} stress accounts in parallel batches...`);
+  const tokens = batchSetupUsers('stress_vu', MAX_VUS, 50, true);
   console.log(`Setup complete: ${tokens.length} accounts ready`);
   return { tokens };
 }
 
+// Module-level — persists across iterations within the same VU runtime.
+// Initialized from setup() data on first iteration, updated on re-login.
+let vuToken = null;
+
 export default function (data) {
-  // Pick initial token by VU index — avoids lazy-init login in hot path
-  let token = data.tokens[__VU - 1];
-  if (!token) {
-    console.error(`No token for VU ${__VU} — skipping`);
-    return;
+  // First iteration: seed token from setup(); subsequent iterations reuse vuToken.
+  if (!vuToken) {
+    vuToken = data.tokens[__VU - 1];
+    if (!vuToken) {
+      console.error(`No token for VU ${__VU} — skipping`);
+      return;
+    }
   }
 
   // Re-login every 10th iteration to stress the auth path (bcrypt + DB + Redis + JWT)
@@ -101,13 +100,13 @@ export default function (data) {
     errorRate.add(!loginOk);
 
     if (loginRes.status === 200) {
-      token = loginRes.json('accessToken');
+      vuToken = loginRes.json('accessToken');
     }
     sleep(0.5);
   }
 
   // ── API stress: list todos (DB read + Redis cache + JWT verify) ───────────
-  const listRes = getTodos(token);
+  const listRes = getTodos(vuToken);
   listDuration.add(listRes.timings.duration);
   const listOk = check(listRes, {
     'list: not 5xx':    (r) => r.status < 500,
@@ -120,7 +119,7 @@ export default function (data) {
   const createRes = http.post(
     `${BASE_URL}/api/todos`,
     JSON.stringify({ text: `Stress ${__VU}-${__ITER}` }),
-    { headers: authHeader(token) },
+    { headers: authHeader(vuToken) },
   );
   const createOk = check(createRes, {
     'create: not 5xx': (r) => r.status < 500,

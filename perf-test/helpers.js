@@ -70,3 +70,63 @@ export function deleteTodo(token, id) {
 export function healthCheck() {
   return http.get(`${BASE_URL}/health/db`);
 }
+
+/**
+ * Pre-create `count` accounts in parallel using http.batch().
+ * Sends `batchSize` register requests simultaneously, then `batchSize` login
+ * requests — dramatically faster than sequential setupUser() calls.
+ *
+ * @param {string} prefix   - username prefix, e.g. "stress_vu" → "stress_vu1"
+ * @param {number} count    - total accounts to create
+ * @param {number} batchSize - concurrent requests per batch (default 50)
+ * @param {boolean} returnTokens - if true, return accessTokens array; if false return empty array
+ * @returns {string[]} accessTokens (empty array if returnTokens=false)
+ */
+export function batchSetupUsers(prefix, count, batchSize = 50, returnTokens = true) {
+  const password = 'Perf@1234!';
+  const tokens = [];
+
+  for (let start = 1; start <= count; start += batchSize) {
+    const end = Math.min(start + batchSize - 1, count);
+
+    // ── 1. Batch register ────────────────────────────────────────────────────
+    const registerRequests = [];
+    for (let i = start; i <= end; i++) {
+      registerRequests.push({
+        method: 'POST',
+        url: `${BASE_URL}/api/auth/register`,
+        body: JSON.stringify({ username: `${prefix}${i}`, password }),
+        params: { headers: JSON_HEADERS },
+      });
+    }
+    // ignore register responses — 400 means account already exists (idempotent)
+    http.batch(registerRequests);
+
+    if (!returnTokens) continue;
+
+    // ── 2. Batch login ───────────────────────────────────────────────────────
+    const loginRequests = [];
+    for (let i = start; i <= end; i++) {
+      loginRequests.push({
+        method: 'POST',
+        url: `${BASE_URL}/api/auth/login`,
+        body: JSON.stringify({ username: `${prefix}${i}`, password }),
+        params: { headers: JSON_HEADERS },
+      });
+    }
+    const loginResponses = http.batch(loginRequests);
+
+    for (const res of loginResponses) {
+      if (res.status === 200) {
+        tokens.push(res.json('accessToken'));
+      } else {
+        console.error(`batch login failed: ${res.status} ${res.body}`);
+        tokens.push(null);
+      }
+    }
+
+    console.log(`Setup progress: ${Math.min(end, count)}/${count} accounts ready`);
+  }
+
+  return tokens;
+}

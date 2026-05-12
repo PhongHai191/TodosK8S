@@ -53,13 +53,13 @@ data:
         {
           "id": 1, "type": "timeseries", "title": "Pod CPU Usage %",
           "gridPos": {"x":0,"y":0,"w":12,"h":8},
-          "targets": [{"expr":"sum by(container) (rate(container_cpu_usage_seconds_total{namespace=\"todoapp\",container!=\"\",container!=\"POD\"}[2m]) * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1)) * 100","legendFormat":"{{container}}","datasource":"Prometheus"}],
+          "targets": [{"expr":"sum by(pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"todoapp\",container!=\"\",container!=\"POD\"}[2m]) * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1)) * 100","legendFormat":"{{container}} {{pod}}","datasource":"Prometheus"}],
           "fieldConfig": {"defaults":{"unit":"percent","min":0}}
         },
         {
           "id": 2, "type": "timeseries", "title": "Pod Memory Usage",
           "gridPos": {"x":12,"y":0,"w":12,"h":8},
-          "targets": [{"expr":"sum by(container) (container_memory_working_set_bytes{namespace=\"todoapp\",container!=\"\",container!=\"POD\"} * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1))","legendFormat":"{{container}}","datasource":"Prometheus"}],
+          "targets": [{"expr":"sum by(pod, container) (container_memory_working_set_bytes{namespace=\"todoapp\",container!=\"\",container!=\"POD\"} * on(pod) group_left() (kube_pod_status_phase{namespace=\"todoapp\",phase=\"Running\"} == 1))","legendFormat":"{{container}} {{pod}}","datasource":"Prometheus"}],
           "fieldConfig": {"defaults":{"unit":"bytes"}}
         },
         {
@@ -108,9 +108,10 @@ data:
           "fieldConfig": {"defaults":{"unit":"short"}}
         },
         {
-          "id": 6, "type": "stat", "title": "Active Users (active sessions)",
+          "id": 6, "type": "stat", "title": "Active Sessions (Redis)",
+          "description": "Number of valid refresh tokens in Redis = logged-in users",
           "gridPos": {"x":18,"y":8,"w":6,"h":8},
-          "targets": [{"expr":"round(sum(increase(http_requests_total{route=~\"/api/.*\",status_code=\"200\"}[5m])))","legendFormat":"Active","datasource":"Prometheus"}],
+          "targets": [{"expr":"redis_db_keys{db=\"db0\"}","legendFormat":"Sessions","datasource":"Prometheus"}],
           "fieldConfig": {"defaults":{"unit":"short","color":{"fixedColor":"green","mode":"fixed"}}}
         },
         {

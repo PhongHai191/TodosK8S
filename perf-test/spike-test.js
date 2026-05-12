@@ -28,7 +28,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
-import { BASE_URL, setupUser, getTodos, healthCheck } from './helpers.js';
+import { BASE_URL, batchSetupUsers, getTodos, healthCheck } from './helpers.js';
 
 const loginDuration   = new Trend('spike_login_duration',   true);
 const listDuration    = new Trend('spike_list_duration',    true);
@@ -39,6 +39,7 @@ const recoveryLatency = new Trend('spike_recovery_latency', true);
 const MAX_VUS = 400;
 
 export const options = {
+  setupTimeout: '3m',  // 400 accounts × ~2 req each — needs more than default 60s
   stages: [
     { duration: '30s', target: 10  },  // baseline — idle
     { duration: '10s', target: 400 },  // SPIKE UP — instant burst
@@ -62,16 +63,10 @@ export function setup() {
   const h = healthCheck();
   console.log(`Pre-spike health: ${h.status} ${h.body}`);
 
-  console.log(`Pre-creating ${MAX_VUS} spike accounts...`);
-  for (let i = 1; i <= MAX_VUS; i++) {
-    // setupUser = register (idempotent) + login — we discard the token here
-    const session = setupUser(`spike_vu${i}`);
-    if (!session) {
-      console.error(`Failed to setup spike_vu${i}`);
-    }
-  }
+  // Register only (returnTokens=false) — login per iteration is intentional
+  console.log(`Pre-creating ${MAX_VUS} spike accounts in parallel batches...`);
+  batchSetupUsers('spike_vu', MAX_VUS, 50, false);
   console.log('Spike accounts ready');
-  // Return nothing — default() will login fresh each iteration (intentional)
 }
 
 export default function () {
