@@ -84,13 +84,10 @@
       when: secret_check.rc == 0
 
     # ── App manifests ──────────────────────────────────────────────────────────
-    - name: Apply backend manifest
-      command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/backend.yaml
-      changed_when: false
-
-    - name: Apply frontend manifest
-      command: kubectl apply -f {{ k8s_manifests_dir }}/todoapp/frontend.yaml
-      changed_when: false
+    # backend.yaml and frontend.yaml contain DEPLOY_TAG placeholder — they are
+    # managed exclusively by web.yml (k8s_deploy role) which substitutes the
+    # real image tag. Applying them here would overwrite the running tag with
+    # the literal string "DEPLOY_TAG" and break the deployment.
 
     - name: Apply ingress
       command: kubectl apply -f {{ k8s_manifests_dir }}/ingress/ingress.yaml
