@@ -8,4 +8,7 @@ COPY . .
 
 
 
+
+
+
 CMD ["node", "src/server.js"]
